@@ -279,11 +279,21 @@
     });
     </script>
     <script>
+    var socket = null;
     var usingMidi = false;
+    var nextColor = "";
+    var leader = true;
+
     const newColor = function() {
-        var aColor = randomColor({ luminosity: 'light' });
-        console.log(aColor);
-        document.body.style.backgroundColor = aColor;
+        console.log('getting new color');
+        if (socket == null) {
+            nextColor = randomColor({ luminosity: 'light' });
+            document.body.style.backgroundColor = nextColor;
+        } else {
+            if (leader) {
+                socket.send(JSON.stringify({ message: "color", data: randomColor({ luminosity: 'light' }), broadcast: true }));
+            }
+        }
     }
 
     document.onreadystatechange = () => {
@@ -316,6 +326,9 @@
             if (newBeatNum > 0) {
                 document.getElementById("body").style.transitionDuration = 60 / newBeatNum + "s"
                 timeoutTime = 1000 * 60 / newBeatNum;
+                if (leader == true && socket != null) {
+                    socket.send(JSON.stringify({ message: "newBeatNum", data: "" + newBeatNum }));
+                }
                 console.log(timeoutTime);
             }
             newBeat = "";
@@ -358,7 +371,7 @@
         // Mask off the lower nibble (MIDI channel, which we don't care about)
         switch (event.data[0] & 0xf0) {
             case 0x90:
-                if (event.data[2] != 0) { 
+                if (event.data[2] != 0) {
                     noteOn(event.data);
                     return;
                 }
@@ -393,6 +406,50 @@
     function noteOff(e) {
         console.log(e);
     }
+
+
+
+
+
+    // websocket in javascript
+    const socketMessageListener = (e) => {
+        console.log(e.data);
+        var data = JSON.parse(e.data);
+        if (data == null) {
+            console.log('problem parsing');
+            return;
+        }
+        if (data.message == "hello" && !leader) {
+            leader = data.data.includes('1 in room');
+        } else if (data.message == "color") {
+            document.body.style.backgroundColor = data.data;
+        } else if (data.message == "newBeatNum") {
+            var newBeatNum = parseInt(data.data, 10)
+            document.getElementById("body").style.transitionDuration = 60 / newBeatNum + "s"
+            timeoutTime = 1000 * 60 / newBeatNum;
+        }
+    };
+    const socketOpenListener = (e) => {
+        console.log('Connected');
+        socket.send(JSON.stringify({ message: "hello" }))
+    };
+    const socketErrorListener = (e) => {
+        console.error(e);
+    }
+    const socketCloseListener = (e) => {
+        if (socket) {
+            console.log('Disconnected.');
+        }
+        var url = window.origin.replace("http", "ws") + '/ws?domain=zack';
+        socket = new WebSocket(url);
+        socket.onopen = socketOpenListener;
+        socket.onmessage = socketMessageListener;
+        socket.onclose = socketCloseListener;
+        socket.onerror = socketErrorListener;
+    };
+    window.addEventListener('load', (event) => {
+        socketCloseListener();
+    });
     </script>
 </body>
 
