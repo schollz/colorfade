@@ -282,9 +282,14 @@
     var socket = null;
     var usingMidi = false;
     var nextColor = "";
-    var leader = true;
+    var leader = false;
+    var locked = false;
 
     const newColor = function() {
+        if (locked)
+            return;
+        locked = true;
+        setTimeout(function() { locked = false }, 100);
         console.log('getting new color');
         if (socket == null) {
             nextColor = randomColor({ luminosity: 'light' });
@@ -315,12 +320,15 @@
 
     var newBeat = '';
     document.addEventListener("keyup", function(event) {
-        // console.log(event);
+        console.log(event);
         if (event.keyCode >= 48 && event.keyCode <= 57) {
             newBeat += event.key;
             // console.log(newBeat);
-        }
-        if (event.keyCode == 13) {
+        } else if (event.keyCode == 192) {
+            // backtick `
+            leader = !leader;
+            console.log(`leader: ${leader}`)
+        } else if (event.keyCode == 13) {
             var newBeatNum = parseInt(newBeat, 10);
             console.log(newBeatNum);
             if (newBeatNum > 0) {
@@ -356,6 +364,8 @@
         console.log(midi);
         var inputs = midi.inputs.values();
         for (var input = inputs.next(); input && !input.done; input = inputs.next()) {
+            if (input.value.name.includes('Through Port'))
+                continue
             console.log(input.value.name)
             input.value.onmidimessage = MIDIMessageEventHandler;
             usingMidi = true;
@@ -399,8 +409,9 @@
 
     function noteOn(e) {
         console.log(e);
-        debounce(newColor, 250);
+        newColor();
     }
+
 
 
     function noteOff(e) {
@@ -419,9 +430,7 @@
             console.log('problem parsing');
             return;
         }
-        if (data.message == "hello" && !leader) {
-            leader = data.data.includes('1 in room');
-        } else if (data.message == "color") {
+        if (data.message == "color") {
             document.body.style.backgroundColor = data.data;
         } else if (data.message == "newBeatNum") {
             var newBeatNum = parseInt(data.data, 10)
